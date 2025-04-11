@@ -12,7 +12,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Инициализируем шаблоны Jinja2
 templates = Jinja2Templates(directory="templates")
 
-# Подключаем роутер (не FastAPI!)
+# Подключаем роутер (FastAPI)
 app.include_router(prediction_router, prefix="/api", tags=["predictions"])
 
 # Главная страница

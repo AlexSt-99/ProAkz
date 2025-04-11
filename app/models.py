@@ -1,4 +1,3 @@
-# app/models.py
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -34,10 +33,10 @@ def load_data(ticker):
     try:
         # Читаем файл с помощью pandas, указывая кодировку и разделитель
         df = pd.read_csv(file_path, encoding='cp1251', delimiter=',')
-        logging.info(f"Data read from file. Shape: {df.shape}")
+        logging.info(f"Данные прочитаны из файла. Размер: {df.shape}")
         
         # Логирование первых строк загруженных данных для диагностики
-        logging.info(f"Loaded data snippet:\n{df.head()}")
+        logging.info(f"Загруженные данные:\n{df.head()}")
         
         # Очистка данных
         df = df.dropna(subset=['TRADEDATE'])
@@ -60,31 +59,32 @@ def load_data(ticker):
         
         # Заполняем пропущенные значения в CLOSE (линейная интерполяция)
         if df['CLOSE'].isnull().any():
-            logging.warning("There are missing values in the 'CLOSE' column.")
+            logging.warning("В столбце 'CLOSE' есть пропущенные значения.")
             missing_count = df['CLOSE'].isnull().sum()
-            logging.info(f"Number of missing values in 'CLOSE': {missing_count}")
+            logging.info(f"Количество пропущенных значений в 'CLOSE': {missing_count}")
             df['CLOSE'] = df['CLOSE'].interpolate(method='time')
-            logging.info(f"Filled {missing_count} missing values in 'CLOSE'")
+            logging.info(f"Заполнено {missing_count} пропущенных значений в 'CLOSE'")
         
         # Проверяем необходимые колонки
         required_columns = {'CLOSE'}
         if not required_columns.issubset(df.columns):
             missing = required_columns - set(df.columns)
-            raise Exception(f"Missing required columns: {missing}")
+            raise Exception(f"Отсутствуют необходимые столбцы: {missing}")
         
-        logging.info(f"DataFrame loaded. Shape: {df.shape}, Date range: {df.index.min()} to {df.index.max()}")
+        logging.info(f"DataFrame загружен. Размер: {df.shape}, Диапазон дат: {df.index.min()} до {df.index.max()}")
         return df
     
     except Exception as e:
-        logging.error(f"Error loading data for {ticker}: {str(e)}")
-        raise
+        logging.error(f"Ошибка при загрузке данных для {ticker}: {str(e)}")
+        raise Exception(f"Ошибка при загрузке данных для {ticker}: {str(e)}")
+
 def create_dataset(data, time_step=1):
     X, Y = [], []
     for i in range(len(data) - time_step - 1):
         a = data[i:(i + time_step), 0]
         X.append(a)
         Y.append(data[i + time_step, 0])
-    logging.info(f"Dataset shape after creating: (X: {len(X)}, Y: {len(Y)})")
+    logging.info(f"Размер датасета после создания: (X: {len(X)}, Y: {len(Y)})")
     return np.array(X), np.array(Y)
 
 def train_model(ticker, save_dir='models'):
@@ -96,7 +96,7 @@ def train_model(ticker, save_dir='models'):
     
     # Проверим, достаточно ли данных
     if len(df) < 100:
-        raise ValueError(f"Not enough data for training. Need at least 100 days, got {len(df)}")
+        raise ValueError(f"Недостаточно данных для обучения. Необходимо минимум 100 дней, получено {len(df)}")
     
     dataset = df.values
     dataset = dataset.astype('float32')
@@ -143,17 +143,17 @@ def train_model(ticker, save_dir='models'):
             val_outputs = model(X_test)
             val_loss = criterion(val_outputs, Y_test.unsqueeze(1))
         
-        logging.info(f"Epoch [{epoch+1}/{num_epochs}], Train Loss: {loss.item():.4f}, Val Loss: {val_loss.item():.4f}")
+        logging.info(f"Эпоха [{epoch+1}/{num_epochs}], Тренировочная потеря: {loss.item():.4f}, Потеря валидации: {val_loss.item():.4f}")
 
     # Сохранение модели и скалера
     os.makedirs(save_dir, exist_ok=True)
     model_save_path = os.path.join(save_dir, f'{ticker}_model.pth')
     torch.save(model.state_dict(), model_save_path)
-    logging.info(f"Model saved to {model_save_path}")
+    logging.info(f"Модель сохранена в {model_save_path}")
 
     scaler_save_path = os.path.join(save_dir, f'{ticker}_scaler.pkl')
     joblib.dump(scaler, scaler_save_path)
-    logging.info(f"Scaler saved to {scaler_save_path}")
+    logging.info(f"Скалер сохранен в {scaler_save_path}")
 
     return model, scaler
 

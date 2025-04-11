@@ -1,4 +1,3 @@
-# app/routes.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from .models import LSTMModel, load_data, train_model, predict_stock_price, predict_future_prices
@@ -29,7 +28,7 @@ def load_or_train_model(ticker):
     scaler_save_path = os.path.join('models', f'{ticker}_scaler.pkl')
 
     if not os.path.exists(model_save_path) or not os.path.exists(scaler_save_path):
-        logging.info("Model not found. Training new model...")
+        logging.info("Модель не найдена. Обучение новой модели...")
         model, scaler = train_model(ticker)
         joblib.dump(scaler, scaler_save_path)
         torch.save(model.state_dict(), model_save_path)
@@ -44,11 +43,11 @@ def load_or_train_model(ticker):
 def predict_historical_price(model, scaler, dataset, date, df):
     date_index = df.index.get_loc(date)
     if date_index < 60:
-        raise Exception(f"Not enough data before {date}. Need 60 days before date.")
+        raise Exception(f"Недостаточно данных до {date}. Необходимо 60 дней перед датой.")
     
     last_60_days = dataset[date_index - 60:date_index]
     predicted_price = predict_stock_price(model, scaler, last_60_days)
-    logging.info(f"Predicted price for {date}: {predicted_price}")
+    logging.info(f"Предсказанная цена для {date}: {predicted_price}")
     
     return {
         "predicted_price": float(predicted_price),
@@ -58,12 +57,12 @@ def predict_historical_price(model, scaler, dataset, date, df):
 def predict_future_price(model, scaler, dataset, date, df):
     days_ahead = (date - df.index[-1]).days
     if days_ahead <= 0:
-        raise Exception(f"Date {date} is before the last available date {df.index[-1].strftime('%Y-%m-%d')}")
+        raise Exception(f"Дата {date} находится раньше последней доступной даты {df.index[-1].strftime('%Y-%m-%d')}")
     
     last_60_days = dataset[-60:]
     future_prices = predict_future_prices(model, scaler, last_60_days, steps=days_ahead)
     predicted_price = future_prices[-1]
-    logging.info(f"Predicted future price for {date}: {predicted_price}")
+    logging.info(f"Предсказанная будущая цена для {date}: {predicted_price}")
     
     return {
         "predicted_price": float(predicted_price),
@@ -76,7 +75,7 @@ async def predict_price(request: PredictionRequest):
     ticker = request.ticker
     date_str = request.date
 
-    logging.info(f"Received request: ticker={ticker}, date={date_str}")
+    logging.info(f"Получен запрос: ticker={ticker}, date={date_str}")
 
     try:
         date = pd.to_datetime(date_str)
@@ -84,10 +83,10 @@ async def predict_price(request: PredictionRequest):
         end_date = (date + timedelta(days=365)).strftime('%Y-%m-%d')
         
         download_data(ticker, start_date=start_date, end_date=end_date)
-        logging.info(f"Data downloaded for ticker: {ticker}")
+        logging.info(f"Данные загружены для тикера: {ticker}")
         
         df = load_data(ticker)
-        logging.info(f"Data loaded for ticker: {ticker}. Date range: {df.index.min()} to {df.index.max()}")
+        logging.info(f"Данные загружены для тикера: {ticker}. Диапазон дат: {df.index.min()} до {df.index.max()}")
         
         # Заполняем пропущенные даты
         date_range = pd.date_range(start=df.index.min(), end=max(df.index.max(), date), freq='D')
@@ -97,7 +96,7 @@ async def predict_price(request: PredictionRequest):
         df, dataset = prepare_dataset(df)
 
         if len(dataset) < 60:
-            raise Exception(f"Not enough data for prediction. Need 60 days, have {len(dataset)}")
+            raise Exception(f"Недостаточно данных для прогнозирования. Необходимо 60 дней, имеется {len(dataset)}")
         
         model, scaler = load_or_train_model(ticker)
         
@@ -108,8 +107,15 @@ async def predict_price(request: PredictionRequest):
             return predict_future_price(model, scaler, dataset, date, df)
 
     except Exception as e:
-        logging.error(f"Error processing request: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        error_message = str(e)
+        if "Не удалось найти заголовок данных в CSV файле" in error_message:
+            error_message = "Тикер не распознан: данные отсутствуют."
+        elif "Тикер" in error_message and "не распознан" in error_message:
+            error_message = "Тикер не распознан: данные отсутствуют."
+        elif "Neither `start` nor `end` can be NaT" in error_message:
+            error_message = "Тикер не распознан: данные отсутствуют."
+        logging.error(f"Ошибка при обработке запроса: {error_message}")
+        raise HTTPException(status_code=400, detail=error_message)
 
 @router.get("/get_min_date/")
 async def get_min_date(ticker: str):
@@ -118,17 +124,22 @@ async def get_min_date(ticker: str):
         df, _ = prepare_dataset(df)
         
         if len(df) < 60:
-            raise Exception(f"Not enough data (need 60 days, have {len(df)})")
+            raise Exception(f"Недостаточно данных (необходимо 60 дней, имеется {len(df)})")
         
         min_date = df.index[59]  # Первая дата, для которой есть 60 предыдущих дней
         max_date = df.index[-1]
         
-        logging.info(f"Date range for {ticker}: {min_date} to {max_date}")
+        logging.info(f"Диапазон дат для {ticker}: {min_date} до {max_date}")
         return {
             "min_date": min_date.strftime('%Y-%m-%d'),
             "max_date": max_date.strftime('%Y-%m-%d')
         }
         
     except Exception as e:
-        logging.error(f"Error getting date range: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        error_message = str(e)
+        if "Не удалось найти заголовок данных в CSV файле" in error_message:
+            error_message = "Тикер не распознан: данные отсутствуют."
+        elif "Тикер" in error_message and "не распознан" in error_message:
+            error_message = "Тикер не распознан: данные отсутствуют."
+        logging.error(f"Ошибка при получении диапазона дат: {error_message}")
+        raise HTTPException(status_code=400, detail=error_message)

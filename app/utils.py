@@ -1,4 +1,3 @@
-# app/utils.py
 import os
 import requests
 import pandas as pd
@@ -31,7 +30,7 @@ def download_data(ticker, start_date=None, end_date=None, max_retries=3):
                 
                 response = requests.get(base_url, params=params)
                 if response.status_code != 200:
-                    raise Exception(f"HTTP error {response.status_code}: {response.text}")
+                    raise Exception(f"HTTP ошибка {response.status_code}: {response.text}")
                 
                 # Читаем данные из ответа
                 data_str = response.text
@@ -48,13 +47,13 @@ def download_data(ticker, start_date=None, end_date=None, max_retries=3):
                         break
                 
                 if data_start is None:
-                    logging.info("No data header found. Breaking loop.")
+                    logging.info("Заголовок данных не найден. Прерываем цикл.")
                     break  # Нет данных
                 
                 # Извлекаем данные
                 data_lines = lines[data_start:data_end]
                 if len(data_lines) <= 1:  # Только заголовок
-                    logging.info("No data lines found. Breaking loop.")
+                    logging.info("Строки данных не найдены. Прерываем цикл.")
                     break
                     
                 # Преобразуем в DataFrame
@@ -62,39 +61,39 @@ def download_data(ticker, start_date=None, end_date=None, max_retries=3):
                 df_batch = pd.read_csv(StringIO(data_str), delimiter=';', encoding='cp1251')
                 
                 # Логирование первых строк батча для диагностики
-                logging.info(f"Batch data snippet:\n{df_batch.head()}")
+                logging.info(f"Фрагмент данных батча:\n{df_batch.head()}")
                 
                 all_data.append(df_batch)
                 
                 # Проверяем, есть ли еще данные
                 if len(df_batch) < batch_size:
-                    logging.info("Batch size less than limit. Breaking loop.")
+                    logging.info("Размер батча меньше лимита. Прерываем цикл.")
                     break
                     
                 start += batch_size
                 time.sleep(0.5)  # Задержка между запросами
             
             if not all_data:
-                raise Exception(f"No data found for {ticker}")
+                raise Exception(f"Данные для {ticker} не найдены")
             
             # Объединяем все данные
             df = pd.concat(all_data, ignore_index=True)
             
             # Логирование объединённых данных для диагностики
-            logging.info(f"Combined data snippet:\n{df.head()}")
+            logging.info(f"Фрагмент объединённых данных:\n{df.head()}")
             
             # Сохраняем в файл
             os.makedirs(DATA_DIR, exist_ok=True)
             file_path = os.path.join(DATA_DIR, f'{ticker}.csv')
             df.to_csv(file_path, index=False, encoding='cp1251')
-            logging.info(f"Data downloaded and saved to {file_path}. Total rows: {len(df)}")
+            logging.info(f"Данные загружены и сохранены в {file_path}. Общее количество строк: {len(df)}")
             return df
             
         except Exception as e:
             if attempt == max_retries - 1:
-                logging.error(f"All attempts failed. Error: {str(e)}")
+                logging.error(f"Все попытки завершились неудачей. Ошибка: {str(e)}")
                 raise
-            logging.warning(f"Attempt {attempt + 1} failed. Retrying... Error: {str(e)}")
+            logging.warning(f"Попытка {attempt + 1} завершилась неудачей. Повторная попытка... Ошибка: {str(e)}")
             time.sleep(2 ** attempt)  # Экспоненциальная задержка
 
 @lru_cache(maxsize=32)
@@ -117,7 +116,7 @@ def load_data(ticker):
                 break
         
         if header_idx is None:
-            raise Exception("Could not find data header in the CSV file")
+            raise Exception("Не удалось найти заголовок данных в CSV файле")
         
         # Читаем только данные
         if footer_idx is not None:
@@ -130,7 +129,7 @@ def load_data(ticker):
         df = pd.read_csv(StringIO(data_str), delimiter=';', encoding='cp1251')
         
         # Логирование первых строк загруженных данных для диагностики
-        logging.info(f"Loaded data snippet:\n{df.head()}")
+        logging.info(f"Фрагмент загруженных данных:\n{df.head()}")
         
         # Очистка данных
         df = df.dropna(subset=['TRADEDATE'])
@@ -153,18 +152,22 @@ def load_data(ticker):
         
         # Проверка наличия пропущенных значений в столбце CLOSE
         if df['CLOSE'].isnull().any():
-            logging.warning("There are missing values in the 'CLOSE' column.")
-            logging.info(f"Number of missing values in 'CLOSE': {df['CLOSE'].isnull().sum()}")
+            logging.warning("В столбце 'CLOSE' есть пропущенные значения.")
+            logging.info(f"Количество пропущенных значений в 'CLOSE': {df['CLOSE'].isnull().sum()}")
         
         # Проверяем необходимые колонки
         required_columns = {'CLOSE'}
         if not required_columns.issubset(df.columns):
             missing = required_columns - set(df.columns)
-            raise Exception(f"Missing required columns: {missing}")
+            raise Exception(f"Отсутствуют необходимые столбцы: {missing}")
         
-        logging.info(f"DataFrame loaded. Shape: {df.shape}, Date range: {df.index.min()} to {df.index.max()}")
+        # Проверка на пустой DataFrame
+        if df.empty:
+            raise Exception(f"Тикер {ticker} не распознан: данные отсутствуют.")
+        
+        logging.info(f"DataFrame загружен. Размер: {df.shape}, Диапазон дат: {df.index.min()} до {df.index.max()}")
         return df
     
     except Exception as e:
-        logging.error(f"Error loading data for {ticker}: {str(e)}")
+        logging.error(f"Ошибка при загрузке данных для {ticker}: {str(e)}")
         raise
